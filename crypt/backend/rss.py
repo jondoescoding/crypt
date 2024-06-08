@@ -1,5 +1,6 @@
 import feedparser
 import random as rd
+import hashlib
 
 def get_rekt_news_articles() -> list:
     """
@@ -17,7 +18,7 @@ def get_rekt_news_articles() -> list:
     # Extract relevant information from each article in the feed
     rekt_articles = [
         {
-            'article_id': int(str(hash(article.link + article.title + article.published))[1:7]),
+            'article_id': int(hashlib.sha256(article.link.encode()).hexdigest(), 16) % (10**6),
             'title': article.title,  # Title of the article
             'publication_date': article.published,  # Publication date of the article
             'summary': article.summary,  # Summary of the article

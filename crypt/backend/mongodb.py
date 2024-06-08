@@ -41,8 +41,10 @@ def upload_to_mongodb(collection_name: str, article_data: list):
         None
     """
     mongodb_collection = db[collection_name]
+
     
     existing_article_ids = set(mongodb_collection.distinct("article_id"))
+    print(f"DEBUG: Existing article IDs in {collection_name}: {existing_article_ids}")
     
     print(f"DEBUG: Inserting articles into {collection_name}...")
     articles_to_insert = [article for article in article_data if article["article_id"] not in existing_article_ids]

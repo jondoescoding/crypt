@@ -1,11 +1,13 @@
 import rss
 import mongodb as mdb
+import apis
 import logging
 
 # Error Handling
 try:
     rekt_news_articles = rss.get_rekt_news_articles()
     crypto_news_articles = rss.get_crypto_news_articles()
+    newscatcher_news_articles = apis.get_news_from_newscatcher()
 except Exception as e:
     logging.error(f"Error fetching news articles: {e}")
     raise
@@ -31,3 +33,10 @@ upload_articles_to_db(
     collection_name="crypto_news", 
     article_data=crypto_news_articles
 )
+
+# Upload newscatcher news articles
+upload_articles_to_db(
+    collection_name="newscatcher_news",
+    article_data=newscatcher_news_articles
+)
+
