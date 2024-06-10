@@ -1,6 +1,6 @@
 import feedparser
 import random as rd
-import hashlib
+from utilities import generate_unique_id
 
 def get_rekt_news_articles() -> list:
     """
@@ -18,7 +18,7 @@ def get_rekt_news_articles() -> list:
     # Extract relevant information from each article in the feed
     rekt_articles = [
         {
-            'article_id': int(hashlib.sha256(article.link.encode()).hexdigest(), 16) % (10**6),
+            'data_id': generate_unique_id(article.link),
             'title': article.title,  # Title of the article
             'publication_date': article.published,  # Publication date of the article
             'summary': article.summary,  # Summary of the article
@@ -46,7 +46,7 @@ def get_crypto_news_articles() -> list:
     # Extract relevant information from each article in the feed
     article_data = [
         {
-            'article_id': int(article.id.split('=')[-1]),  # Unique ID of the article
+            'data_id': generate_unique_id(article.link),  # Unique ID of the article
             'title': article.title,  # Title of the article
             'link': article.link,  # URL link to the full article
             'author_detail': article.author_detail,  # Author details of the article

@@ -29,7 +29,7 @@ except Exception as e:
 # Setting up the database
 db = client['crypt']
 
-def upload_to_mongodb(collection_name: str, article_data: list):
+def upload_to_mongodb(collection_name: str, data: list):
     """
     Uploads a list of article data to a specified MongoDB collection, avoiding duplicates based on article_id.
 
@@ -43,19 +43,18 @@ def upload_to_mongodb(collection_name: str, article_data: list):
     mongodb_collection = db[collection_name]
 
     
-    existing_article_ids = set(mongodb_collection.distinct("article_id"))
-    print(f"DEBUG: Existing article IDs in {collection_name}: {existing_article_ids}")
+    existing_ids = set(mongodb_collection.distinct("data_id"))
     
-    print(f"DEBUG: Inserting articles into {collection_name}...")
-    articles_to_insert = [article for article in article_data if article["article_id"] not in existing_article_ids]
+    print(f"DEBUG: Inserting data into {collection_name}...")
+    data_to_insert = [data_point for data_point in data if data_point["data_id"] not in existing_ids]
     
-    if articles_to_insert:
+    if data_to_insert:
         try:
-            mongodb_collection.insert_many(articles_to_insert)
-            print(f"Inserted {len(articles_to_insert)} articles.")
+            mongodb_collection.insert_many(data_to_insert)
+            print(f"Inserted {len(data_to_insert)} data points.")
         except PyMongoError as e:
             print(f"PyMongo error: {e}")
         except Exception as e:
             print(f"General error: {e}")
     else:
-        print("No new articles to insert.")
+        print("No new data points to insert.")

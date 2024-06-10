@@ -2,40 +2,50 @@
 from datetime import datetime, timedelta
 from pprint import pprint
 from dotenv import load_dotenv
+from pyyoutube import Client
 from newscatcherapi_client import Newscatcher, ApiException
 import os
+from utilities import generate_unique_id
 
 # Environmental Variables
 load_dotenv('.env')
 
+COUNTRIES = "AD, AE, AF, AG, AI, AL, AM, AO, AQ, AR, AS, AT, AU, AW, AX, AZ, BA, BB, BD, BE, BF, BG, BH, BI, BJ, BL, BM, BN, BO, BQ, BR, BS, BT, BV, BW, BY, BZ, CA, CC, CD, CF, CG, CH, CI, CK, CL, CM, CN, CO, CR, CU, CV, CW, CX, CY, CZ, DE, DJ, DK, DM, DO, DZ, EC, EE, EG, EH, ER, ES, ET, FI, FJ, FK, FM, FO, FR, GA, GB, GD, GE, GF, GG, GH, GI, GL, GM, GN, GP, GQ, GR, GS, GT, GU, GW, GY, HK"
+
+LANG = "af,ar,bg,bn,ca,cs,cy,cn,da,de,el,en,es,et,fa,fi,fr,gu,he,hi,hr,hu,id,it,ja,kn,ko,lt,lv,mk,ml,mr,ne,nl,no,pa,pl,pt,ro,ru,sk,sl,so,sq,sv,sw,ta,te,th,tl,tr,tw,uk,ur,vi"
+
 def get_news_from_newscatcher() -> list:
     """
     Retrieves news articles from the Newscatcher API.
-
-    Returns:
-        A list of news articles.
-
-    Raises:
-        None.
+    Returns a list of news articles.
+    Raises ApiException if the API request fails.
     """
+    
+    print("DEBUG: Retrieving news articles from Newscatcher API")
     
     # Newscatcher API
     newscatcher = Newscatcher(api_key=os.getenv('NEWS_API'))
+    
+    print("DEBUG: Setting up Newscatcher API client")
+    
     try:
         response = newscatcher.search.get(q="DeFi, Cryptocurrency, NFTs",
             search_in="content, summary, title",
-            lang="af,ar,bg,bn,ca,cs,cy,cn,da,de,el,en,es,et,fa,fi,fr,gu,he,hi,hr,hu,id,it,ja,kn,ko,lt,lv,mk,ml,mr,ne,nl,no,pa,pl,pt,ro,ru,sk,sl,so,sq,sv,sw,ta,te,th,tl,tr,tw,uk,ur,vi",
+            lang=LANG,
             sort_by="date", # most recent articles are grabbed first
             page=1,
-            countries="AD, AE, AF, AG, AI, AL, AM, AO, AQ, AR, AS, AT, AU, AW, AX, AZ, BA, BB, BD, BE, BF, BG, BH, BI, BJ, BL, BM, BN, BO, BQ, BR, BS, BT, BV, BW, BY, BZ, CA, CC, CD, CF, CG, CH, CI, CK, CL, CM, CN, CO, CR, CU, CV, CW, CX, CY, CZ, DE, DJ, DK, DM, DO, DZ, EC, EE, EG, EH, ER, ES, ET, FI, FJ, FK, FM, FO, FR, GA, GB, GD, GE, GF, GG, GH, GI, GL, GM, GN, GP, GQ, GR, GS, GT, GU, GW, GY, HK",
+            countries=COUNTRIES,
             from_= (datetime.now() - timedelta(days=30)).strftime('%Y/%m/%d'), # changed the timeframe to 30 days from 182 days
             is_paid_content= False,
         )
         
+        print("DEBUG: Received response from Newscatcher API")
+        
         if response.status == "ok":
+            print("DEBUG: Response status is ok, processing articles")
             newscatcher_articles = [
                 {
-                    "article_id": article['id'],
+                    "data_id": generate_unique_id(article['link']),
                     "title": article['title'],
                     "author": article['author'],
                     "authors": article['authors'],
@@ -66,11 +76,63 @@ def get_news_from_newscatcher() -> list:
                     "score": article['score']
                 } for article in response.articles
             ]
+            print("DEBUG: Processed articles, returning the list")
             return newscatcher_articles
     except ApiException as e:
-        print(f"Error: {e}")
+        print(f"DEBUG: Error: {e}")
         if e.status in [422, 403]:
             pprint(e.body)
     
+    print("DEBUG: Returning empty list due to API error")
     return []
 
+
+def extract_youtube_videos() -> list:
+    """
+    Extracts YouTube videos related to crypto news.
+    
+    Returns:
+    list: A list of dictionaries containing video information.
+    """
+    print("DEBUG: Entering extract_youtube_videos function")
+    
+    try:
+        print("DEBUG: Creating YouTube API client")
+        client = Client(api_key=os.getenv('YOUTUBE_API_KEY'))
+        
+        print("DEBUG: Searching for YouTube videos with 'crypto news' query")
+        search_results = client.search.list(
+            q="crypto news",
+            part='snippet',
+            maxResults=50,
+            order="date",
+            relevance_language="en",
+            type="video",
+            video_caption="closedCaption",
+            published_after=datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z',
+        )
+        
+        print("DEBUG: Processing search results")
+        video_list = [
+            {
+                "channel_id": video.snippet.channelId,
+                "channel_title": video.snippet.channelTitle,
+                "data_id": generate_unique_id(f"https://www.youtube.com/watch?v={video.id.videoId}"),
+                "video_url": f"https://www.youtube.com/watch?v={video.id.videoId}",
+                "title": video.snippet.title,
+                "description": video.snippet.description,
+                "published_date": video.snippet.publishedAt,
+                "thumbnail": video.snippet.thumbnails.default.url
+            } for video in search_results.items
+        ]
+        
+        print("DEBUG: Returning video list")
+        return video_list
+    except Exception as e:
+        print(f"DEBUG: Error: {e}")
+    print("DEBUG: Returning empty list due to error")
+    return []
+
+# Example usage
+youtube_link = extract_youtube_videos()
+print(youtube_link)
