@@ -1,5 +1,4 @@
 import feedparser
-import random as rd
 from utilities import generate_unique_id
 
 def get_rekt_news_articles() -> list:

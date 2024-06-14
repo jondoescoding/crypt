@@ -1,10 +1,10 @@
 # Imports 
+import os
 from datetime import datetime, timedelta
 from pprint import pprint
 from dotenv import load_dotenv
 from pyyoutube import Client
 from newscatcherapi_client import Newscatcher, ApiException
-import os
 from utilities import generate_unique_id
 
 # Environmental Variables
