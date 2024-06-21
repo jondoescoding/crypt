@@ -6,8 +6,7 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
 # Loading the environmental variables from the containing folder
-load_dotenv(dotenv_path=r'.env')
-
+load_dotenv()
 
 def ChatOpenRouter(model: str, temperature: int) -> ChatOpenAI:
     """
