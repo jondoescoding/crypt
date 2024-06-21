@@ -1,7 +1,6 @@
 # Imports
 import os
 import requests
-import pandas as pd
 from datetime import datetime
 
 # Langchain
@@ -11,6 +10,14 @@ from langchain.tools import StructuredTool
 """
 FUNCTIONS
 """
+
+def fetch_data(url, headers):
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()  # Raises an HTTPError for bad responses
+        return response.json()
+    except requests.RequestException as e:
+        return {"error": str(e)}
 
 def get_all_coins():
     """
@@ -24,14 +31,11 @@ def get_specific_coin_data(coin_data: str):
     Returns specific cryptocurrency coin data from the coin gecko platform based on the provided coin name, symbol, or id.
     """
     url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest?limit=1000"
-    
     headers = {
         "accept": "application/json",
         "X-CMC_PRO_API_KEY": os.getenv("COIN_MARKET_CAP_TOKEN")
     }
-
-    response = requests.get(url, headers=headers)
-    coins = response.json().get("data", [])
+    coins = fetch_data(url, headers).get("data", [])
 
     for coin in coins:
         if coin_data.lower() in [coin["name"].lower(), coin["symbol"].lower(), coin["slug"].lower()]:
@@ -91,16 +95,14 @@ def get_nft_data(nft_data: str):
         otherwise a string indicating that no data was found for the provided NFT.
     """
     url = f"https://api.coingecko.com/api/v3/nfts/{nft_data.replace(' ', '-').lower()}"
-    
     headers = {
         "accept": "application/json",
         "x-cg-demo-api-key": os.getenv("COINGECKO_API_KEY")
     }
+    response = fetch_data(url, headers)
     
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
-        return response.json()
+    if response:
+        return response
     else:
         return f"No data found for the provided NFT: {nft_data}"
 
@@ -110,46 +112,54 @@ def get_derivative_data(derivative_data: str):
     """
 
     url = "https://api.coingecko.com/api/v3/derivatives/exchanges?order=name_asc&per_page=100"
-    
     headers = {
         "accept": "application/json",
         "x-cg-demo-api-key": os.getenv("COINGECKO_API_KEY")
     }
+    response = fetch_data(url, headers)
     
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
-        exchanges = response.json()
+    if response:
+        exchanges = response
         for exchange in exchanges:
             if derivative_data.lower() in [exchange["name"].lower(), exchange["id"].lower()]:
                 return exchange
         return f"No data found for the provided derivative exchange: {derivative_data}"
     else:
-        return f"Failed to fetch data from the API. Status code: {response.status_code}"
+        return f"Failed to fetch data from the API."
 
-
-def get_trending_coins_nft_derivative():
+def get_trending_coins():
     url = "https://api.coingecko.com/api/v3/search/trending"
-    
     headers = {
         "accept": "application/json",
-        "x-cg-demo-api-key": "CG-zWJQ754BinqYbYC9po9Q7mXx"
+        "x-cg-demo-api-key": os.getenv("COINGECKO_API_KEY")
     }
-    
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
-        data = response.json()
-        coins = data.get('coins', [])
-        
-        # Split the coins data into chunks
-        chunk_size = 3  # Adjust the chunk size as needed
-        chunks = [coins[i:i + chunk_size] for i in range(0, len(coins), chunk_size)]
-        
-        return chunks
-    else:
-        return f"Failed to fetch data from the API. Status code: {response.status_code}"
+    data = fetch_data(url, headers)
+    coins_data = data.get('coins', [])
 
+    for coin in coins_data:
+        # Remove 'price_change_percentage_24h' from the coin data
+        if 'price_change_percentage_24h' in coin.get('item', {}).get('data', {}):
+            del coin['item']['data']['price_change_percentage_24h']
+
+    return coins_data
+
+def get_trending_nfts():
+    url = "https://api.coingecko.com/api/v3/search/trending"
+    headers = {
+        "accept": "application/json",
+        "x-cg-demo-api-key": os.getenv("COINGECKO_API_KEY")
+    }
+    data = fetch_data(url, headers)
+    return data.get('nfts', [])
+
+def get_trending_categories():
+    url = "https://api.coingecko.com/api/v3/search/trending"
+    headers = {
+        "accept": "application/json",
+        "x-cg-demo-api-key": os.getenv("COINGECKO_API_KEY")
+    }
+    data = fetch_data(url, headers)
+    return data.get('categories', [])
 
 
 """
@@ -207,10 +217,27 @@ get_derivative_data_tool = StructuredTool.from_function(
 )
 
 get_trending_coins_tool = StructuredTool.from_function(
-    func=get_trending_coins_nft_derivative,
-    name="Get_Trending_Coins_NFT_Derivative",
-    description="Returns the trending search coins, nfts and categories on CoinGecko in the last 24 hours. Supports: Top 15 trending coins (sorted by the most popular user searches), Top 7 trending NFTs (sorted by the highest percentage change in floor prices), Top 5 trending categories (sorted by the most popular user searches)"
+    func=get_trending_coins,
+    name="Get_Trending_Coins",
+    description="Returns the trending coins data from the CoinGecko platform.",
+    args_schema=None
 )
+
+get_trending_nfts_tool = StructuredTool.from_function(
+    func=get_trending_nfts,
+    name="Get_Trending_NFTs",
+    description="Returns the trending NFTs data from the CoinGecko platform.",
+    args_schema=None
+)
+
+get_trending_categories_tool = StructuredTool.from_function(
+    func=get_trending_categories,
+    name="Get_Trending_Categories",
+    description="Returns the trending categories data from the CoinGecko platform.",
+    args_schema=None
+)
+
+
 
 # ----------TESTING----------------
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -218,7 +245,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from llm import LLM
 
 
-tools = [get_all_coins_tool, specific_coin_price_tool, convert_coin_price_tool, get_nft_data_tool, get_derivative_data_tool, get_trending_coins_nft_derivative_tool]
+tools = [get_all_coins_tool, specific_coin_price_tool, convert_coin_price_tool, get_nft_data_tool, get_derivative_data_tool, get_trending_coins_tool, get_trending_nfts_tool, get_trending_categories_tool]
 prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -235,4 +262,4 @@ agent = create_tool_calling_agent(LLM.gpt3_5, tools, prompt)
 
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
-print(agent_executor.invoke({"input": "what is the trending coin's price today in JMD?"}))
+print(agent_executor.invoke({"input": "what is the name of the number 1 trending category? Give me an overview report on it."}))

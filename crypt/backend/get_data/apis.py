@@ -21,12 +21,9 @@ def get_news_from_newscatcher() -> list:
     Raises ApiException if the API request fails.
     """
     
-    print("DEBUG: Retrieving news articles from Newscatcher API")
-    
+    print("DEBUG: Setting up Newscatcher API client")   
     # Newscatcher API
     newscatcher = Newscatcher(api_key=os.getenv('NEWS_API'))
-    
-    print("DEBUG: Setting up Newscatcher API client")
     
     try:
         response = newscatcher.search.get(q="DeFi, Cryptocurrency, NFTs",
