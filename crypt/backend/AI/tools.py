@@ -7,12 +7,18 @@ from dotenv import load_dotenv
 # Langchain
 from langchain.pydantic_v1 import BaseModel, Field
 from langchain.tools import StructuredTool
-from langchain_experimental.utilities import PythonREPL
 from llm import LLM
 
 # Phidata
 from phi.assistant.python import PythonAssistant
 from phi.llm.openai import OpenAIChat
+
+# Contracts
+from ape import Contract, networks
+from ape.exceptions import ContractLogicError
+from ape.types import AddressType
+from langchain.pydantic_v1 import BaseModel, Field
+
 
 # Loading the environmental variables from the containing folder
 load_dotenv()
@@ -52,6 +58,23 @@ def get_specific_coin_data(coin_data: str):
             return coin
 
     return f"No data found for the provided coin: {coin_data}"
+
+
+def get_specific_coin_address(coin_name: str):
+    """
+    Returns the contract address for a specific cryptocurrency coin.
+    """
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_name}"
+    headers = {
+        "accept": "application/json",
+        "x-cg-demo-api-key": os.getenv("COINGECKO_API_KEY")
+    }
+    response = fetch_data(url, headers)
+    
+    if response:
+        return response.get("platforms")
+    else:
+        return f"No data found for the provided coin: {coin_name}"
 
 def get_specific_coin_price(coin_name: str):
     """
@@ -180,8 +203,6 @@ def get_trending_categories():
     """
     Fetches and returns trending categories data from the CoinGecko API.
 
-    This function sends a GET request to the CoinGecko API to retrieve trending categories data. It sets the 'accept' header to 'application/json' to specify the expected response format and includes the API key in the 'x-cg-demo-api-key' header for authentication. The function then parses the response and returns a list of trending categories data. If no categories data is found, an empty list is returned.
-
     Returns:
         list: A list of dictionaries, each representing a trending category with its data.
     """
@@ -240,15 +261,54 @@ def get_ohlc_chat_by_id(coin_name: str, days: int):
     
     return data
 
+def find_arb_opportunities_traderjoe(coin1, coin2):
+    from ape import networks
+
+    # TraderJoe router contract address
+    ROUTER_ADDRESS = "0x60aE616a2155Ee3d9A68541Ba4544862310933d4"
+    
+    # Native token (AVAX) address for Avalanche
+    NATIVE_TOKEN_ADDRESS = "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7"
+    
+    # Use the Chainstack RPC link to connect to the Avalanche network
+    with networks.parse_network_choice("avalanche:mainnet:https://avalanche-mainnet.core.chainstack.com/ext/bc/C/rpc/f33804dd98cad6bc454e78ea22d84e82") as provider:
+        # Set up contracts
+        router_contract = Contract(ROUTER_ADDRESS)
+        token0 = Contract(coin1)
+        token1 = Contract(coin2)
+        native_token = Contract(NATIVE_TOKEN_ADDRESS)
+        
+        while True:
+            try:
+                qty_out = router_contract.getAmountsOut(
+                    10**token0.decimals(),
+                    [token0.address, native_token.address, token1.address]
+                )[-1] / 10**token1.decimals()
+                
+                print(f"1 {token0.symbol()} = {qty_out} {token1.symbol()}: No Arbitrage opportunity")
+                if 1.01 <= qty_out < 2.00:
+                    print(f"{datetime.datetime.now().strftime('[%I:%M:%S %p]')} {token0.symbol()} -> {token1.symbol()}: ({qty_out:.3f})")
+                    print("Arbitrage opportunity found!")
+                    return True
+            
+            except ContractLogicError as e:
+                print(f"Error occurred: {e}")
+                return False
+
 
 """
 CLASSES
 """
 
+class ArbitrageInput(BaseModel):
+    coin1: str = Field(description="This is either the name, symbol or an id of a coin as represented on the CoinGecko Website. IDs of coins on CoinGecko typically have hyphens. For example: bitcoin")
+    coin2: str = Field(description="This is either the name, symbol or an id of a coin as represented on the CoinGecko Website. IDs of coins on CoinGecko typically have hyphens. For example: bitcoin")
+
+
 # CoinInput class is used to define the input structure for coin-related operations.
 # It contains a single field 'coin_name' which should be the ID# of a coin.
 class CoinInput(BaseModel):
-    coin_name: str = Field(description="Should be the ID# of a coin")
+    coin_name: str = Field(description="This is either the name, symbol or an id of a coin as represented on the CoinGecko Website. IDs of coins on CoinGecko typically have hyphens. For example: bitcoin")
 
 # MoneyInput class is used to define the input structure for currency conversion operations.
 # It contains two fields: 'usd_coin_price' for the USD dollar value ($) of the coin and 'currency_to_convert_to' for the target currency.
@@ -287,6 +347,13 @@ class AIPrompt(BaseModel):
 """
 TOOL CREATION (combination of classes and functions)
 """
+
+get_specific_coin_address_tool = StructuredTool.from_function(
+    func=get_specific_coin_address,
+    name="Get_Specific_Coin_Address",
+    description="Returns the contract address for a specific cryptocurrency coin.",
+    args_schema=CoinInput
+)
 
 # This tool returns an error message if the user asks for more coins than 10.
 get_all_coins_tool = StructuredTool.from_function(
@@ -351,6 +418,12 @@ get_trending_categories_tool = StructuredTool.from_function(
     args_schema=None
 )
 
+get_specific_coin_data_tool = StructuredTool.from_function(
+    func=get_specific_coin_data,
+    name="Get_Specific_Coin_Data",
+    description="Returns specific cryptocurrency coin data from the Coin Gecko platform."
+)
+
 # Python Tool
 python_assistant = PythonAssistant(
     llm=OpenAIChat(model="gpt-3.5-turbo", api_key=os.getenv("OPENAI_TOKEN")),
@@ -388,14 +461,19 @@ ohlc_tool = StructuredTool.from_function(
     args_schema=OHLCData
 )
 
+find_arb_opportunities_traderjoe_tool = StructuredTool.from_function(
+    func=find_arb_opportunities_traderjoe,
+    name="Find_Arb_Opportunities_TraderJoe",
+    description="Returns if there is an arbitrage opportunity for two coins on TraderJoe",
+    args_schema=ArbitrageInput
+)
 
 # ----------TESTING----------------
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 from llm import LLM
 
-
-tools = [get_all_coins_tool, specific_coin_price_tool, convert_coin_price_tool, get_nft_data_tool, get_derivative_data_tool, get_trending_coins_tool, get_trending_nfts_tool, get_trending_categories_tool, get_historical_data_by_id_tool, ohlc_tool, python_assistant_tool]
+tools = [get_all_coins_tool, specific_coin_price_tool, convert_coin_price_tool, get_nft_data_tool, get_derivative_data_tool, get_trending_coins_tool, get_trending_nfts_tool, get_trending_categories_tool, get_historical_data_by_id_tool, ohlc_tool, python_assistant_tool, get_specific_coin_data_tool, find_arb_opportunities_traderjoe_tool, get_specific_coin_address_tool]
 
 prompt = ChatPromptTemplate.from_messages(
     [
@@ -415,6 +493,6 @@ agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 print(agent_executor.invoke(
     {
-        "input": "Using ALL of the last 30 days of prices for Bitcoin predict what the prices will be 7 days from now. Do not show any plots. ONLY print the 7 days values by their date."
+        "input": "Get the contract addresses for USDT and USDC on the Avalanche network. Then find arbitrage opportunities on TraderJoe for them both."
     })
     )
