@@ -1,0 +1,14 @@
+default_ecosystem: avalanche
+
+plugins:
+  - name: avalanche
+
+networks:
+  avalanche:
+    mainnet:
+      default_provider: chainstack
+
+node:
+  avalanche:
+    mainnet:
+      uri: https://avalanche-mainnet.core.chainstack.com/ext/bc/C/rpc/f33804dd98cad6bc454e78ea22d84e82
